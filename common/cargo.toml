@@ -6,4 +6,6 @@ edition = "2021"
 [dependencies]
 log = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
+
 inquire = "0.6.2"

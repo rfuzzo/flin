@@ -1,22 +1,17 @@
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
-    label: String,
+use common::Game;
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct TemplateApp {
+    game: Game,
     // this how you opt-out of serialization of a member
-    #[serde(skip)]
-    value: f32,
+    // #[serde(skip)]
+    // value: f32,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
-        Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
-        }
+        Self { game: Game::new() }
     }
 }
 
@@ -48,7 +43,7 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { label, value } = self;
+        let Self { game } = self;
 
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
@@ -60,6 +55,18 @@ impl eframe::App for TemplateApp {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if ui.button("New Game").clicked() {
+                        *game = Game::new();
+                        ui.close_menu();
+                    }
+
+                    if ui.button("Play Game").clicked() {
+                        game.play(false);
+                        ui.close_menu();
+                    }
+
+                    ui.separator();
+
                     if ui.button("Quit").clicked() {
                         _frame.close();
                     }
@@ -67,53 +74,73 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // playing field
 
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(label);
-            });
-
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
+            // trump card
+            if let Some(trump) = &game.trump_card {
+                ui.label(trump.to_string());
+            } else if let Some(trump_suit) = &game.trump_suit {
+                ui.label(trump_suit.to_string());
+            } else {
+                ui.label("[ Trump ]");
             }
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
-                    );
-                    ui.label(".");
-                });
+            ui.separator();
+
+            // trick
+            ui.horizontal(|ui| {
+                if let Some(trick0) = &game.trick.0 {
+                    ui.label(trick0.to_string());
+                } else {
+                    ui.label("[ trick 0 ]");
+                }
+
+                if let Some(trick1) = &game.trick.1 {
+                    ui.label(trick1.to_string());
+                } else {
+                    ui.label("[ trick 1 ]");
+                }
             });
-        });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
+            ui.separator();
 
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
-        });
+            // player hand
+            ui.horizontal(|ui| {
+                for c in game.player_hand.clone().iter().map(|c| c.to_string()) {
+                    //ui.label(c.to_string());
 
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally choose either panels OR windows.");
+                    if ui.button(c.to_string()).clicked() {
+                        let index = &game
+                            .player_hand
+                            .iter()
+                            .position(|p| p.to_string() == c)
+                            .unwrap();
+                        let card = game.player_hand.swap_remove(*index);
+
+                        let is_forehand = game.trick.0.is_none();
+                        game.play_card(card, common::EPlayer::PC, is_forehand);
+                    }
+                }
             });
-        }
+
+            // points
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Points PC: ");
+                ui.label(game.get_points(common::EPlayer::PC).to_string());
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Points NPC: ");
+                ui.label(game.get_points(common::EPlayer::NPC).to_string());
+            });
+
+            // winner
+            ui.separator();
+            if let Some(winner) = game.winner {
+                ui.label(format!("The winner is {}", winner));
+            }
+        });
     }
 }

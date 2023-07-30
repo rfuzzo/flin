@@ -14,7 +14,7 @@ fn main() {
     println!("Care for a round of Flin?");
 
     let mut g = Game::new();
-    g.play();
+    g.play(true);
     if let Some(winner) = g.winner {
         info!("The winner is: {}", winner);
     } else {

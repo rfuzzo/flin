@@ -1,13 +1,14 @@
-use std::fmt::Display;
+use std::{fmt::Display, thread, time};
 
 use inquire::{error::InquireError, Select};
 use log::{debug, error, info};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use serde::{Deserialize, Serialize};
 
 // enums
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum EPlayer {
     PC,
     NPC,
@@ -21,7 +22,7 @@ impl Display for EPlayer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Deserialize, Serialize)]
 pub enum EValue {
     Unter = 2,
     Ober = 3,
@@ -42,7 +43,7 @@ impl Display for EValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ESuit {
     Hearts,
     Bells,
@@ -63,7 +64,7 @@ impl Display for ESuit {
 
 // structs
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Card {
     pub suit: ESuit,
     pub value: EValue,
@@ -81,7 +82,7 @@ impl Card {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Game {
     pub trump_suit: Option<ESuit>,
     pub trump_card: Option<Card>,
@@ -94,6 +95,7 @@ pub struct Game {
     // meta
     pub forehand: Option<EPlayer>,
     pub winner: Option<EPlayer>,
+    pub is_console: bool,
 }
 
 impl Game {
@@ -109,11 +111,13 @@ impl Game {
             npc_hand: vec![],
             forehand: None,
             winner: None,
+            is_console: true,
         }
     }
 
     /// Starts this [`Game`].
-    pub fn play(&mut self) {
+    pub fn play(&mut self, is_console: bool) {
+        self.is_console = is_console;
         debug!("A new game has started.");
 
         // determine who is dealer
@@ -177,64 +181,18 @@ impl Game {
     ///
     /// Panics if .
     fn do_turn(&mut self, player: EPlayer, is_forehand: bool) {
-        // debug!("= It's {}'s turn.", player);
-
-        let card = match player {
+        match player {
             EPlayer::PC => {
-                // wait for input
-                self.player_choose_card()
-            }
-            EPlayer::NPC => {
-                // pick a card
-                self.ai_choose_card()
-            }
-        };
-
-        // play card
-        debug!("{} was played by {}", card, player);
-        let wins_or_none = self.play_card(card, is_forehand);
-
-        if is_forehand {
-            // end turn and go to other player
-            self.do_turn(get_opponent(player), false);
-        } else {
-            // evaluate trick
-            if let Some(wins) = wins_or_none {
-                if wins {
-                    info!("{} won this trick", player);
-
-                    self.give_trick_to(player);
-                    // I draw
-                    if self.can_draw_card() {
-                        self.deal_card(player);
-                        self.deal_card(get_opponent(player));
-                    }
-
-                    if self.end_game() {
-                        return;
-                    }
-
-                    // can play again
-                    self.do_turn(player, true);
-                } else {
-                    info!("{} won this trick", get_opponent(player));
-
-                    self.give_trick_to(get_opponent(player));
-                    // opponent draws
-                    if self.can_draw_card() {
-                        self.deal_card(get_opponent(player));
-                        self.deal_card(player);
-                    }
-
-                    if self.end_game() {
-                        return;
-                    }
-
-                    // loose and opponents turn
-                    self.do_turn(get_opponent(player), true);
+                if self.is_console {
+                    let card = self.player_choose_card();
+                    self.play_card(card, player, is_forehand);
                 }
             }
-        }
+            EPlayer::NPC => {
+                let card = self.ai_choose_card();
+                self.play_card(card, player, is_forehand);
+            }
+        };
     }
 
     /// Plays a card and evaluates the trick
@@ -242,19 +200,57 @@ impl Game {
     /// # Panics
     ///
     /// Panics if not forehand and no card in trick
-    fn play_card(&mut self, card: Card, is_forehand: bool) -> Option<bool> {
+    pub fn play_card(&mut self, card: Card, player: EPlayer, is_forehand: bool) {
+        debug!("{} was played by {}", card, player);
+
         if is_forehand {
             self.trick.0 = Some(card);
-            None
+
+            // end turn and go to other player
+            self.do_turn(get_opponent(player), false);
         } else {
-            // evaluate trick
             self.trick.1 = Some(card);
-            let wins_trick = wins(
+
+            let wins = wins(
                 self.trick.1.as_ref().unwrap(),
                 self.trick.0.as_ref().unwrap(),
                 self.trump_suit.clone().unwrap(),
             );
-            Some(wins_trick)
+
+            // evaluate trick
+            if wins {
+                info!("{} won this trick", player);
+
+                self.give_trick_to(player);
+                // I draw
+                if self.can_draw_card() {
+                    self.deal_card(player);
+                    self.deal_card(get_opponent(player));
+                }
+
+                if self.end_game() {
+                    return;
+                }
+
+                // can play again
+                self.do_turn(player, true);
+            } else {
+                info!("{} won this trick", get_opponent(player));
+
+                self.give_trick_to(get_opponent(player));
+                // opponent draws
+                if self.can_draw_card() {
+                    self.deal_card(get_opponent(player));
+                    self.deal_card(player);
+                }
+
+                if self.end_game() {
+                    return;
+                }
+
+                // loose and opponents turn
+                self.do_turn(get_opponent(player), true);
+            }
         }
     }
 
@@ -375,11 +371,17 @@ impl Game {
         false
     }
 
-    fn get_points(&self, player: EPlayer) -> usize {
+    pub fn get_points(&self, player: EPlayer) -> usize {
         match player {
             EPlayer::PC => self.player_stack.iter().map(|c| c.value as usize).sum(),
             EPlayer::NPC => self.npc_stack.iter().map(|c| c.value as usize).sum(),
         }
+    }
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -388,12 +390,6 @@ fn wins(card: &Card, played_card: &Card, trump: ESuit) -> bool {
         card.value > played_card.value
     } else {
         card.suit == trump
-    }
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
