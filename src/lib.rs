@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use inquire::{error::InquireError, Select};
+use log::{debug, error, info};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
@@ -113,7 +114,7 @@ impl Game {
 
     /// Starts this [`Game`].
     pub fn play(&mut self) {
-        println!("A new game has started.");
+        debug!("A new game has started.");
 
         // determine who is dealer
         let mut dealer: EPlayer = EPlayer::PC;
@@ -122,7 +123,7 @@ impl Game {
             dealer = EPlayer::NPC;
         }
         let first_player = get_opponent(dealer);
-        println!("The dealer is: {}.", dealer);
+        debug!("The dealer is: {}.", dealer);
 
         // deal cards
         self.deal_card(first_player);
@@ -136,7 +137,7 @@ impl Game {
         if let Some(c) = &self.trump_card {
             self.trump_suit = Some(c.suit.clone());
 
-            println!("Trump card is: {}.", c);
+            debug!("Trump card is: {}.", c);
         }
 
         self.deal_card(first_player);
@@ -176,7 +177,7 @@ impl Game {
     ///
     /// Panics if .
     fn do_turn(&mut self, player: EPlayer, is_forehand: bool) {
-        println!("= It's {}'s turn.", player);
+        // debug!("= It's {}'s turn.", player);
 
         let card = match player {
             EPlayer::PC => {
@@ -190,7 +191,7 @@ impl Game {
         };
 
         // play card
-        println!("{} was played by {}", card, player);
+        debug!("{} was played by {}", card, player);
         let wins_or_none = self.play_card(card, is_forehand);
 
         if is_forehand {
@@ -199,9 +200,9 @@ impl Game {
         } else {
             // evaluate trick
             if let Some(wins) = wins_or_none {
-                println!("{} won this trick: {}", player, wins);
-
                 if wins {
+                    info!("{} won this trick", player);
+
                     self.give_trick_to(player);
                     // I draw
                     if self.can_draw_card() {
@@ -216,6 +217,8 @@ impl Game {
                     // can play again
                     self.do_turn(player, true);
                 } else {
+                    info!("{} won this trick", get_opponent(player));
+
                     self.give_trick_to(get_opponent(player));
                     // opponent draws
                     if self.can_draw_card() {
@@ -270,7 +273,7 @@ impl Game {
                     }
                 }
 
-                println!("{} has {} points", player, self.get_points(player));
+                debug!("{} has {} points", player, self.get_points(player));
             }
         }
     }
@@ -307,6 +310,19 @@ impl Game {
             .map(|c| c.to_string())
             .collect::<Vec<_>>();
 
+        // info
+        if let Some(trick) = &self.trick.0 {
+            if let Some(trump) = &self.trump_card {
+                info!("[ {} ] | {}", trump, trick);
+            } else if let Some(trump_suit) = &self.trump_suit {
+                info!("[ {} ] | {}", trump_suit, trick);
+            }
+        } else if let Some(trump) = &self.trump_card {
+            info!("[ {} ] | ", trump);
+        } else if let Some(trump_suit) = &self.trump_suit {
+            info!("[ {} ] | ", trump_suit);
+        }
+
         let ans: Result<String, InquireError> = Select::new("Choose a card", options).prompt();
 
         match ans {
@@ -325,7 +341,7 @@ impl Game {
                         if card.suit != trick.suit
                             && self.player_hand.iter().any(|c| c.suit == trick.suit)
                         {
-                            println!("You violated the law!");
+                            error!("You violated the law!");
                         }
                         // must win (stichzwang)
                         // todo
@@ -341,7 +357,7 @@ impl Game {
     /// Checks if the game should end
     fn end_game(&mut self) -> bool {
         if self.player_hand.is_empty() && self.npc_hand.is_empty() {
-            println!("The game ended.");
+            info!("The game ended.");
 
             // count cards in stacks
             let player_count = self.get_points(EPlayer::PC);

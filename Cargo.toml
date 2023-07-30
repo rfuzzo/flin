@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 inquire = "0.6.2"
+log = "0.4.19"
+simple_logger = "4.2.0"
