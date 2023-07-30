@@ -1,4 +1,4 @@
-use flin::Game;
+use common::Game;
 use log::info;
 use simple_logger::SimpleLogger;
 
