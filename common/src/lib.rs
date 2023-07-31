@@ -1,4 +1,4 @@
-use std::{fmt::Display, thread, time};
+use std::fmt::Display;
 
 use inquire::{error::InquireError, Select};
 use log::{debug, error, info};
@@ -395,7 +395,8 @@ fn wins(card: &Card, played_card: &Card, trump: ESuit) -> bool {
 
 // helper methods
 
-fn get_deck() -> Vec<Card> {
+/// .
+pub fn get_deck() -> Vec<Card> {
     let mut rng = thread_rng();
 
     let mut r = vec![

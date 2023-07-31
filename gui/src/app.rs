@@ -1,17 +1,22 @@
-use common::Game;
+use std::{collections::HashMap, path::Path};
+
+use common::{get_deck, Game};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct TemplateApp {
     game: Game,
     // this how you opt-out of serialization of a member
-    // #[serde(skip)]
-    // value: f32,
+    #[serde(skip)]
+    textures: HashMap<String, egui::TextureHandle>,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
-        Self { game: Game::new() }
+        Self {
+            game: Game::new(),
+            textures: HashMap::default(),
+        }
     }
 }
 
@@ -34,6 +39,39 @@ impl TemplateApp {
     }
 }
 
+fn load_image_from_path<P>(path: P) -> Result<egui::ColorImage, image::ImageError>
+where
+    P: AsRef<Path>,
+{
+    let image = image::io::Reader::open(path)?.decode()?;
+    let size = [image.width() as _, image.height() as _];
+    let image_buffer = image.to_rgba8();
+    let pixels = image_buffer.as_flat_samples();
+
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+        size,
+        pixels.as_slice(),
+    ))
+}
+
+fn load_textures(ctx: &egui::Context) -> HashMap<String, egui::TextureHandle> {
+    let mut map: HashMap<String, egui::TextureHandle> = HashMap::default();
+    let path = std::env::current_dir().unwrap();
+
+    for c in get_deck() {
+        let path = path
+            .join("assets")
+            .join(format!("{}.png", c.to_string().to_lowercase()));
+        if path.exists() {
+            if let Ok(image) = load_image_from_path(path) {
+                let texture = ctx.load_texture(c.to_string(), image, Default::default());
+                map.insert(c.to_string(), texture);
+            }
+        }
+    }
+    map
+}
+
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -43,12 +81,11 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { game } = self;
+        let Self { game, textures } = self;
 
-        // Examples of how to create different panels and windows.
-        // Pick whichever suits you.
-        // Tip: a good default choice is to just keep the `CentralPanel`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
+        if textures.is_empty() {
+            *textures = load_textures(ctx);
+        }
 
         #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
