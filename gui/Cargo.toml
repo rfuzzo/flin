@@ -3,8 +3,6 @@ name = "flin_gui"
 version = "0.1.0"
 authors = ["Moritz Baron  <r.fuzzo@gmail.com>"]
 edition = "2021"
-rust-version = "1.69"
-
 
 [dependencies]
 common = { path = "../common" }
@@ -18,7 +16,7 @@ eframe = { version = "0.22", default-features = false, features = [
   "wgpu",          # Use the glow rendering backend. Alternative: "glow".
   "persistence",   # Enable restoring app state when restarting the app.
 ] }
-egui_dnd = "0.4"
+egui-notify = "0.7.0"
 
 # You only need serde if you want app persistence:
 serde = { workspace = true }

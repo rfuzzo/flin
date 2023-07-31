@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use inquire::{error::InquireError, Select};
-use log::{debug, error, info};
+use log::Level;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use serde::{Deserialize, Serialize};
@@ -82,7 +82,7 @@ impl Card {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
 pub struct Game {
     pub trump_suit: Option<ESuit>,
     pub trump_card: Option<Card>,
@@ -96,10 +96,13 @@ pub struct Game {
     pub forehand: Option<EPlayer>,
     pub winner: Option<EPlayer>,
     pub is_console: bool,
+    pub fn_notify: Option<Notification>,
 }
 
+type Notification = fn(&str, Level);
+
 impl Game {
-    pub fn new() -> Self {
+    pub fn new(is_console: bool, fn_notify: Option<Notification>) -> Self {
         Self {
             trump_card: None,
             trump_suit: None,
@@ -111,14 +114,14 @@ impl Game {
             npc_hand: vec![],
             forehand: None,
             winner: None,
-            is_console: true,
+            is_console,
+            fn_notify,
         }
     }
 
     /// Starts this [`Game`].
-    pub fn play(&mut self, is_console: bool) {
-        self.is_console = is_console;
-        debug!("A new game has started.");
+    pub fn play(&mut self) {
+        self.log("A new game has started.", Level::Debug);
 
         // determine who is dealer
         let mut dealer: EPlayer = EPlayer::PC;
@@ -127,7 +130,7 @@ impl Game {
             dealer = EPlayer::NPC;
         }
         let first_player = get_opponent(dealer);
-        debug!("The dealer is: {}.", dealer);
+        self.log(format!("The dealer is: {}.", dealer).as_str(), Level::Debug);
 
         // deal cards
         self.deal_card(first_player);
@@ -141,7 +144,7 @@ impl Game {
         if let Some(c) = &self.trump_card {
             self.trump_suit = Some(c.suit.clone());
 
-            debug!("Trump card is: {}.", c);
+            self.log(format!("Trump card is: {}.", c).as_str(), Level::Debug);
         }
 
         self.deal_card(first_player);
@@ -151,6 +154,12 @@ impl Game {
 
         // start first turn
         self.do_turn(first_player, true);
+    }
+
+    fn log(&mut self, msg: &str, level: Level) {
+        if let Some(notify) = self.fn_notify {
+            notify(msg, level);
+        }
     }
 
     /// Deals a card from the talon, or the trump card if the talon is empty
@@ -201,7 +210,10 @@ impl Game {
     ///
     /// Panics if not forehand and no card in trick
     pub fn play_card(&mut self, card: Card, player: EPlayer, is_forehand: bool) {
-        debug!("{} was played by {}", card, player);
+        self.log(
+            format!("{} was played by {}", card, player).as_str(),
+            Level::Debug,
+        );
 
         if is_forehand {
             self.trick.0 = Some(card);
@@ -219,7 +231,7 @@ impl Game {
 
             // evaluate trick
             if wins {
-                info!("{} won this trick", player);
+                self.log(format!("{} won this trick", player).as_str(), Level::Info);
 
                 self.give_trick_to(player);
                 // I draw
@@ -235,7 +247,10 @@ impl Game {
                 // can play again
                 self.do_turn(player, true);
             } else {
-                info!("{} won this trick", get_opponent(player));
+                self.log(
+                    format!("{} won this trick", get_opponent(player)).as_str(),
+                    Level::Info,
+                );
 
                 self.give_trick_to(get_opponent(player));
                 // opponent draws
@@ -269,7 +284,10 @@ impl Game {
                     }
                 }
 
-                debug!("{} has {} points", player, self.get_points(player));
+                self.log(
+                    format!("{} has {} points", player, self.get_points(player)).as_str(),
+                    Level::Debug,
+                );
             }
         }
     }
@@ -309,14 +327,17 @@ impl Game {
         // info
         if let Some(trick) = &self.trick.0 {
             if let Some(trump) = &self.trump_card {
-                info!("[ {} ] | {}", trump, trick);
+                self.log(format!("[ {} ] | {}", trump, trick).as_str(), Level::Info);
             } else if let Some(trump_suit) = &self.trump_suit {
-                info!("[ {} ] | {}", trump_suit, trick);
+                self.log(
+                    format!("[ {} ] | {}", trump_suit, trick).as_str(),
+                    Level::Info,
+                );
             }
         } else if let Some(trump) = &self.trump_card {
-            info!("[ {} ] | ", trump);
+            self.log(format!("[ {} ] | ", trump).as_str(), Level::Info);
         } else if let Some(trump_suit) = &self.trump_suit {
-            info!("[ {} ] | ", trump_suit);
+            self.log(format!("[ {} ] | ", trump_suit).as_str(), Level::Info);
         }
 
         let ans: Result<String, InquireError> = Select::new("Choose a card", options).prompt();
@@ -337,7 +358,7 @@ impl Game {
                         if card.suit != trick.suit
                             && self.player_hand.iter().any(|c| c.suit == trick.suit)
                         {
-                            error!("You violated the law!");
+                            self.log("You violated the law!", Level::Error);
                         }
                         // must win (stichzwang)
                         // todo
@@ -353,7 +374,7 @@ impl Game {
     /// Checks if the game should end
     fn end_game(&mut self) -> bool {
         if self.player_hand.is_empty() && self.npc_hand.is_empty() {
-            info!("The game ended.");
+            self.log("The game ended.", Level::Info);
 
             // count cards in stacks
             let player_count = self.get_points(EPlayer::PC);
@@ -376,12 +397,6 @@ impl Game {
             EPlayer::PC => self.player_stack.iter().map(|c| c.value as usize).sum(),
             EPlayer::NPC => self.npc_stack.iter().map(|c| c.value as usize).sum(),
         }
-    }
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
