@@ -1,7 +1,8 @@
 use std::{collections::HashMap, path::Path};
 
-use common::{get_deck, Game};
 use egui_notify::Toasts;
+
+use crate::{get_deck, Game};
 
 static TEXTURE_SIZE: f32 = 256.0;
 
@@ -63,48 +64,11 @@ impl eframe::App for TemplateApp {
     //     eframe::set_value(storage, eframe::APP_KEY, self);
     // }
 
-    #[cfg(target_arch = "wasm32")]
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self {
-            game,
-            textures,
-            toasts,
-        } = self;
-
-        // Examples of how to create different panels and windows.
-        // Pick whichever suits you.
-        // Tip: a good default choice is to just keep the `CentralPanel`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
-
-        #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Quit").clicked() {
-                        _frame.close();
-                    }
-                });
-            });
-        });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
-        });
-    }
-
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    #[cfg(not(target_arch = "wasm32"))]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        use crate::EPlayer;
+
         let Self {
             game,
             textures,
@@ -116,7 +80,6 @@ impl eframe::App for TemplateApp {
             *textures = load_textures(ctx);
         }
 
-        #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
@@ -133,6 +96,7 @@ impl eframe::App for TemplateApp {
 
                     ui.separator();
 
+                    #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
                     if ui.button("Quit").clicked() {
                         _frame.close();
                     }
@@ -151,6 +115,8 @@ impl eframe::App for TemplateApp {
                     r.on_hover_ui(|ui| {
                         ui.label(trump.to_string());
                     });
+                } else {
+                    ui.label(trump.to_string());
                 }
             } else if let Some(trump_suit) = &game.trump_suit {
                 ui.label(trump_suit.to_string());
@@ -169,6 +135,8 @@ impl eframe::App for TemplateApp {
                         r.on_hover_ui(|ui| {
                             ui.label(trick0.to_string());
                         });
+                    } else {
+                        ui.label(trick0.to_string());
                     }
                 } else {
                     ui.label("[ trick 0 ]");
@@ -181,6 +149,8 @@ impl eframe::App for TemplateApp {
                         r.on_hover_ui(|ui| {
                             ui.label(trick1.to_string());
                         });
+                    } else {
+                        ui.label(trick1.to_string());
                     }
                 } else {
                     ui.label("[ trick 1 ]");
@@ -198,7 +168,6 @@ impl eframe::App for TemplateApp {
                         let w = egui::ImageButton::new(texture, img_size);
                         let r = ui.add(w);
                         if r.clicked() {
-                            //if ui.button(c.to_string()).clicked() {
                             let index = &game
                                 .player_hand
                                 .iter()
@@ -207,11 +176,21 @@ impl eframe::App for TemplateApp {
                             let card = game.player_hand.swap_remove(*index);
 
                             let is_forehand = game.trick.0.is_none();
-                            game.play_card(card, common::EPlayer::PC, is_forehand);
+                            game.play_card(card, EPlayer::PC, is_forehand);
                         }
                         r.on_hover_ui(|ui| {
                             ui.label(c);
                         });
+                    } else if ui.button(c.to_string()).clicked() {
+                        let index = &game
+                            .player_hand
+                            .iter()
+                            .position(|p| p.to_string() == c)
+                            .unwrap();
+                        let card = game.player_hand.swap_remove(*index);
+
+                        let is_forehand = game.trick.0.is_none();
+                        game.play_card(card, EPlayer::PC, is_forehand);
                     }
                 }
             });
@@ -220,12 +199,12 @@ impl eframe::App for TemplateApp {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label("Points PC: ");
-                ui.label(game.get_points(common::EPlayer::PC).to_string());
+                ui.label(game.get_points(EPlayer::PC).to_string());
             });
 
             ui.horizontal(|ui| {
                 ui.label("Points NPC: ");
-                ui.label(game.get_points(common::EPlayer::NPC).to_string());
+                ui.label(game.get_points(EPlayer::NPC).to_string());
             });
 
             // winner
@@ -254,12 +233,10 @@ where
 
 fn load_textures(ctx: &egui::Context) -> HashMap<String, egui::TextureHandle> {
     let mut map: HashMap<String, egui::TextureHandle> = HashMap::default();
-    let path = std::env::current_dir().unwrap();
+    let path = get_asset_dir();
 
     for c in get_deck() {
-        let path = path
-            .join("assets")
-            .join(format!("{}.jpg", c.to_string().to_lowercase()));
+        let path = path.join(format!("{}.jpg", c.to_string().to_lowercase()));
         if path.exists() {
             if let Ok(image) = load_image_from_path(path) {
                 let texture = ctx.load_texture(c.to_string(), image, Default::default());
@@ -268,4 +245,17 @@ fn load_textures(ctx: &egui::Context) -> HashMap<String, egui::TextureHandle> {
         }
     }
     map
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn get_asset_dir() -> std::path::PathBuf {
+    std::env::current_dir().unwrap().join("assets")
+}
+
+#[cfg(target_arch = "wasm32")]
+fn get_asset_dir() -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    let path = PathBuf::from("");
+    path
 }

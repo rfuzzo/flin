@@ -6,13 +6,13 @@
 fn main() -> eframe::Result<()> {
     // Log to stdout (if you run with `RUST_LOG=debug`).
 
-    use flin_gui::TemplateApp;
+    use flin::TemplateApp;
 
     tracing_subscriber::fmt::init();
 
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "eframe template",
+        "flin",
         native_options,
         Box::new(|cc: &eframe::CreationContext<'_>| Box::new(TemplateApp::new(cc))),
     )
@@ -21,7 +21,7 @@ fn main() -> eframe::Result<()> {
 // When compiling to web using trunk:
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    use flin_gui::TemplateApp;
+    use flin::TemplateApp;
 
     // Redirect `log` message to `console.log` and friends:
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
@@ -31,7 +31,7 @@ fn main() {
     wasm_bindgen_futures::spawn_local(async {
         eframe::WebRunner::new()
             .start(
-                "the_canvas_id", // hardcode it
+                "flin_canvas_id", // hardcode it
                 web_options,
                 Box::new(|cc| Box::new(TemplateApp::new(cc))),
             )

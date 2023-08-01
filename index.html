@@ -7,10 +7,10 @@
 
 <head>
   <!-- change this to your project name -->
-  <title>flin_gui</title>
+  <title>flin</title>
 
   <!-- config for our rust wasm binary. go to https://trunkrs.dev/assets/#rust for more customization -->
-  <link data-trunk rel="rust" data-wasm-opt="2" data-type="main" href="gui" data-bin="flin_gui" />
+  <link data-trunk rel="rust" data-wasm-opt="2" />
   <!-- this is the base url relative to which other urls will be constructed. trunk will insert this from the public-url option -->
   <base data-trunk-public-url />
 
@@ -24,6 +24,26 @@
   <link data-trunk rel="copy-file" href="assets/icon_ios_touch_192.png" />
   <link data-trunk rel="copy-file" href="assets/maskable_icon_x512.png" />
 
+  <link data-trunk rel="copy-file" href="assets/bells.ober.jpg" />
+  <link data-trunk rel="copy-file" href="assets/bells.unter.jpg" />
+  <link data-trunk rel="copy-file" href="assets/bells.x.jpg" />
+  <link data-trunk rel="copy-file" href="assets/hearts.ace.jpg" />
+  <link data-trunk rel="copy-file" href="assets/hearts.king.jpg" />
+  <link data-trunk rel="copy-file" href="assets/hearts.ober.jpg" />
+  <link data-trunk rel="copy-file" href="assets/hearts.unter.jpg" />
+  <link data-trunk rel="copy-file" href="assets/hearts.x.jpg" />
+  <link data-trunk rel="copy-file" href="assets/leaves.ace.jpg" />
+  <link data-trunk rel="copy-file" href="assets/leaves.king.jpg" />
+  <link data-trunk rel="copy-file" href="assets/leaves.ober.jpg" />
+  <link data-trunk rel="copy-file" href="assets/leaves.unter.jpg" />
+  <link data-trunk rel="copy-file" href="assets/leaves.x.jpg" />
+  <link data-trunk rel="copy-file" href="assets/acorns.ace.jpg" />
+  <link data-trunk rel="copy-file" href="assets/acorns.king.jpg" />
+  <link data-trunk rel="copy-file" href="assets/acorns.ober.jpg" />
+  <link data-trunk rel="copy-file" href="assets/acorns.unter.jpg" />
+  <link data-trunk rel="copy-file" href="assets/acorns.x.jpg" />
+  <link data-trunk rel="copy-file" href="assets/bells.ace.jpg" />
+  <link data-trunk rel="copy-file" href="assets/bells.king.jpg" />
 
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon_ios_touch_192.png">
@@ -118,14 +138,20 @@
 </head>
 
 <body>
-
   <!-- The WASM code will resize the canvas dynamically -->
   <!-- the id is hardcoded in main.rs . so, make sure both match. -->
-  <canvas id="flin_gui_id"></canvas>
+  <canvas id="flin_canvas_id"></canvas>
 
   <!--Register Service Worker. this will cache the wasm / js scripts for offline use (for PWA functionality). -->
   <!-- Force refresh (Ctrl + F5) to load the latest files instead of cached files  -->
-
+  <!-- <script>
+    // We disable caching during development so that we always view the latest version.
+    if ('serviceWorker' in navigator && window.location.hash !== "#dev") {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+  </script> -->
 </body>
 
 </html>
