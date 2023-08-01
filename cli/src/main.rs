@@ -13,7 +13,7 @@ fn main() {
 
     println!("Care for a round of Flin?");
 
-    let mut g = Game::new(true, Some(notify));
+    let mut g = Game::new(true, Some(notify), Some(console_prompt_player));
     g.play();
     if let Some(winner) = g.winner {
         info!("The winner is: {}", winner);
@@ -29,5 +29,14 @@ fn notify(msg: &str, level: log::Level) {
         log::Level::Info => info!("{}", msg),
         log::Level::Debug => debug!("{}", msg),
         log::Level::Trace => trace!("{}", msg),
+    }
+}
+
+fn console_prompt_player(options: Vec<String>) -> String {
+    let ans: Result<String, inquire::InquireError> =
+        inquire::Select::new("Choose a card", options).prompt();
+    match ans {
+        Ok(choice) => choice,
+        Err(_) => panic!("There was an error, please try again."),
     }
 }

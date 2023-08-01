@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use inquire::{error::InquireError, Select};
 use log::Level;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -96,13 +95,20 @@ pub struct Game {
     pub forehand: Option<EPlayer>,
     pub winner: Option<EPlayer>,
     pub is_console: bool,
+    // callbacks
     pub fn_notify: Option<Notification>,
+    pub fn_sync_prompt: Option<SyncPrompt>,
 }
 
 type Notification = fn(&str, Level);
+type SyncPrompt = fn(Vec<String>) -> String;
 
 impl Game {
-    pub fn new(is_console: bool, fn_notify: Option<Notification>) -> Self {
+    pub fn new(
+        is_console: bool,
+        fn_notify: Option<Notification>,
+        fn_sync_prompt: Option<SyncPrompt>,
+    ) -> Self {
         Self {
             trump_card: None,
             trump_suit: None,
@@ -116,6 +122,7 @@ impl Game {
             winner: None,
             is_console,
             fn_notify,
+            fn_sync_prompt,
         }
     }
 
@@ -340,35 +347,33 @@ impl Game {
             self.log(format!("[ {} ] | ", trump_suit).as_str(), Level::Info);
         }
 
-        let ans: Result<String, InquireError> = Select::new("Choose a card", options).prompt();
+        let result = if let Some(prompt) = self.fn_sync_prompt {
+            prompt(options)
+        } else {
+            panic!("Prompt is needed in console mode.");
+        };
 
-        match ans {
-            Ok(choice) => {
-                let index = self
-                    .player_hand
-                    .iter()
-                    .position(|p| p.to_string() == choice)
-                    .unwrap();
-                let card = self.player_hand.swap_remove(index);
+        let index = self
+            .player_hand
+            .iter()
+            .position(|p| p.to_string() == result)
+            .unwrap();
+        let card = self.player_hand.swap_remove(index);
 
-                // check follow suit rules
-                if self.must_follow_suit() {
-                    if let Some(trick) = &self.trick.0 {
-                        // must follow trick suit (farbzwang)
-                        if card.suit != trick.suit
-                            && self.player_hand.iter().any(|c| c.suit == trick.suit)
-                        {
-                            self.log("You violated the law!", Level::Error);
-                        }
-                        // must win (stichzwang)
-                        // todo
-                    }
+        // check follow suit rules
+        if self.must_follow_suit() {
+            if let Some(trick) = &self.trick.0 {
+                // must follow trick suit (farbzwang)
+                if card.suit != trick.suit && self.player_hand.iter().any(|c| c.suit == trick.suit)
+                {
+                    self.log("You violated the law!", Level::Error);
                 }
-
-                card
+                // must win (stichzwang)
+                // todo
             }
-            Err(_) => panic!("There was an error, please try again."),
         }
+
+        card
     }
 
     /// Checks if the game should end

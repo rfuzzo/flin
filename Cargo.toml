@@ -3,7 +3,10 @@ members = ["common", "cli", "gui"]
 
 
 [workspace.dependencies]
-rand = "0.8.5"
+rand = { version = "0.8.5", default-features = false, features = [
+  "std",
+  "std_rng",
+] }
 log = "0.4.19"
 simple_logger = "4.2.0"
 serde = { version = "1", features = ["derive"] }

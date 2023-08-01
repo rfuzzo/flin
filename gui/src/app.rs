@@ -18,7 +18,7 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            game: Game::new(false, None),
+            game: Game::new(false, None, None),
             textures: HashMap::default(),
             toasts: Toasts::default(),
         }
@@ -83,7 +83,7 @@ impl eframe::App for TemplateApp {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("New Game").clicked() {
-                        *game = Game::new(false, Some(Self::notify));
+                        *game = Game::new(false, Some(Self::notify), None);
                         ui.close_menu();
                     }
 

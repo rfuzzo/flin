@@ -10,3 +10,5 @@ common = { path = "../common" }
 
 log = { workspace = true }
 simple_logger = { workspace = true }
+
+inquire = "0.6.2"

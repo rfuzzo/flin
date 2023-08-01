@@ -6,35 +6,41 @@
 fn main() -> eframe::Result<()> {
     // Log to stdout (if you run with `RUST_LOG=debug`).
 
+    use flin_gui::TemplateApp;
+
     tracing_subscriber::fmt::init();
 
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Box::new(flin_gui::TemplateApp::new(cc))),
+        Box::new(|cc| Box::new(TemplateApp::new(cc))),
     )
 }
 
 // when compiling to web using trunk.
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    // Redirect tracing to console.log and friends:
-    tracing_wasm::set_as_global_default();
+    use flin_gui::WebHandle;
+    // // Redirect tracing to console.log and friends:
+    // tracing_wasm::set_as_global_default();
 
-    // send application log to console.log
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    // // send application log to console.log
+    // eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-    wasm_bindgen_futures::spawn_local(async {
-        let runner = eframe::WebRunner::new();
-        let web_options = eframe::WebOptions::default();
-        runner
-            .start(
-                "the_canvas_id", // hardcode it
-                web_options,
-                Box::new(|cc| Box::new(eframe_template::TemplateApp::new(cc))),
-            )
-            .await
-            .expect("failed to start eframe");
-    });
+    // wasm_bindgen_futures::spawn_local(async {
+    //     let runner = eframe::WebRunner::new();
+    //     let web_options = eframe::WebOptions::default();
+    //     runner
+    //         .start(
+    //             "flin_gui_id", // hardcode it
+    //             web_options,
+    //             Box::new(|cc| Box::new(TemplateApp::new(cc))),
+    //         )
+    //         .await
+    //         .expect("failed to start eframe");
+    // });
+
+    let handle = WebHandle::new();
+    handle.start("flin_gui_id");
 }
