@@ -115,7 +115,7 @@ impl eframe::App for TemplateApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // playing field
-            
+            egui::ScrollArea::vertical().show(ui, |ui| {
             // trump card
             if let Some(trump) = &game.trump_card {
                 if let Some(texture) = textures.get(&trump.to_string()) {
@@ -235,6 +235,7 @@ impl eframe::App for TemplateApp {
             if let Some(winner) = game.winner {
                 ui.label(format!("The winner is {}", winner));
             }
+        });
 
             toasts.show(ctx);
         });
