@@ -1,5 +1,6 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
+use egui_extras::RetainedImage;
 use egui_notify::Toasts;
 
 use crate::{get_deck, Game};
@@ -13,7 +14,7 @@ pub struct TemplateApp {
     toasts: Toasts,
 
     //#[serde(skip)]
-    textures: HashMap<String, egui::TextureHandle>,
+    textures: HashMap<String, RetainedImage>,
 }
 
 impl Default for TemplateApp {
@@ -111,7 +112,7 @@ impl eframe::App for TemplateApp {
             if let Some(trump) = &game.trump_card {
                 if let Some(texture) = textures.get(&trump.to_string()) {
                     let img_size = TEXTURE_SIZE * texture.size_vec2() / texture.size_vec2().y;
-                    let r = ui.image(texture, img_size);
+                    let r = ui.image(texture.texture_id(ctx), img_size);
                     r.on_hover_ui(|ui| {
                         ui.label(trump.to_string());
                     });
@@ -131,7 +132,7 @@ impl eframe::App for TemplateApp {
                 if let Some(trick0) = &game.trick.0 {
                     if let Some(texture) = textures.get(&trick0.to_string()) {
                         let img_size = TEXTURE_SIZE * texture.size_vec2() / texture.size_vec2().y;
-                        let r = ui.image(texture, img_size);
+                        let r = ui.image(texture.texture_id(ctx), img_size);
                         r.on_hover_ui(|ui| {
                             ui.label(trick0.to_string());
                         });
@@ -145,7 +146,7 @@ impl eframe::App for TemplateApp {
                 if let Some(trick1) = &game.trick.1 {
                     if let Some(texture) = textures.get(&trick1.to_string()) {
                         let img_size = TEXTURE_SIZE * texture.size_vec2() / texture.size_vec2().y;
-                        let r = ui.image(texture, img_size);
+                        let r = ui.image(texture.texture_id(ctx), img_size);
                         r.on_hover_ui(|ui| {
                             ui.label(trick1.to_string());
                         });
@@ -165,7 +166,7 @@ impl eframe::App for TemplateApp {
                     if let Some(texture) = textures.get(&c) {
                         let img_size = TEXTURE_SIZE * texture.size_vec2() / texture.size_vec2().y;
 
-                        let w = egui::ImageButton::new(texture, img_size);
+                        let w = egui::ImageButton::new(texture.texture_id(ctx), img_size);
                         let r = ui.add(w);
                         if r.clicked() {
                             let index = &game
@@ -216,46 +217,40 @@ impl eframe::App for TemplateApp {
     }
 }
 
-fn load_image_from_path<P>(path: P) -> Result<egui::ColorImage, image::ImageError>
-where
-    P: AsRef<Path>,
-{
-    let image = image::io::Reader::open(path)?.decode()?;
-    let size = [image.width() as _, image.height() as _];
-    let image_buffer = image.to_rgba8();
-    let pixels = image_buffer.as_flat_samples();
+//#[cfg(target_arch = "wasm32")]
+fn load_textures(_ctx: &egui::Context) -> HashMap<String, RetainedImage> {
+    let mut map: HashMap<String, RetainedImage> = HashMap::default();
 
-    Ok(egui::ColorImage::from_rgba_unmultiplied(
-        size,
-        pixels.as_slice(),
-    ))
-}
+    // include textures
+    let map2: Vec<&[u8]> = vec![
+        include_bytes!("../assets/leaves.x.jpg"),
+        include_bytes!("../assets/hearts.unter.jpg"),
+        include_bytes!("../assets/hearts.ober.jpg"),
+        include_bytes!("../assets/hearts.king.jpg"),
+        include_bytes!("../assets/hearts.x.jpg"),
+        include_bytes!("../assets/hearts.ace.jpg"),
+        include_bytes!("../assets/bells.unter.jpg"),
+        include_bytes!("../assets/bells.ober.jpg"),
+        include_bytes!("../assets/bells.king.jpg"),
+        include_bytes!("../assets/bells.x.jpg"),
+        include_bytes!("../assets/bells.ace.jpg"),
+        include_bytes!("../assets/acorns.unter.jpg"),
+        include_bytes!("../assets/acorns.ober.jpg"),
+        include_bytes!("../assets/acorns.king.jpg"),
+        include_bytes!("../assets/acorns.x.jpg"),
+        include_bytes!("../assets/acorns.ace.jpg"),
+        include_bytes!("../assets/leaves.unter.jpg"),
+        include_bytes!("../assets/leaves.ober.jpg"),
+        include_bytes!("../assets/leaves.king.jpg"),
+        include_bytes!("../assets/leaves.x.jpg"),
+        include_bytes!("../assets/leaves.ace.jpg"),
+    ];
 
-fn load_textures(ctx: &egui::Context) -> HashMap<String, egui::TextureHandle> {
-    let mut map: HashMap<String, egui::TextureHandle> = HashMap::default();
-    let path = get_asset_dir();
-
-    for c in get_deck() {
-        let path = path.join(format!("{}.jpg", c.to_string().to_lowercase()));
-        if path.exists() {
-            if let Ok(image) = load_image_from_path(path) {
-                let texture = ctx.load_texture(c.to_string(), image, Default::default());
-                map.insert(c.to_string(), texture);
-            }
+    for (i, c) in get_deck().iter().enumerate() {
+        if let Ok(image) = RetainedImage::from_image_bytes(c.to_string(), map2[i]) {
+            map.insert(c.to_string(), image);
         }
     }
+
     map
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn get_asset_dir() -> std::path::PathBuf {
-    std::env::current_dir().unwrap().join("assets")
-}
-
-#[cfg(target_arch = "wasm32")]
-fn get_asset_dir() -> std::path::PathBuf {
-    use std::path::PathBuf;
-
-    let path = PathBuf::from("");
-    path
 }
