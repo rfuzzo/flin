@@ -7,7 +7,8 @@ Eventually a TES3 Morrowind mod (Hence the name).
 
 ## Playing
 
-TBD
+- Online at: https://rfuzzo.github.io/flin/
+- Locally if you build the app: `cargo run`
 
 ## Credits
 
