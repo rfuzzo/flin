@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use egui_extras::RetainedImage;
 use egui_notify::Toasts;
 
-use crate::{get_deck, EGameState, EPlayer, Game};
+use crate::{get_deck, EPlayer, Game};
 
 static TEXTURE_SIZE: f32 = 256.0;
 
@@ -15,8 +15,6 @@ pub struct TemplateApp {
 
     //#[serde(skip)]
     textures: HashMap<String, RetainedImage>,
-    //#[serde(skip)]
-    // last_turn_time: f64,
 }
 
 impl Default for TemplateApp {
@@ -25,7 +23,6 @@ impl Default for TemplateApp {
             game: Game::new(),
             textures: HashMap::default(),
             toasts: Toasts::default(),
-            // last_turn_time: -1.0,
         }
     }
 }
@@ -72,11 +69,13 @@ impl eframe::App for TemplateApp {
 
         // a turn in the game
         let current_time = ctx.input(|i| i.time);
-
+        let mut allowed = false;
         if let Some(state) = &game.state {
             match state {
                 crate::EGameState::None => {}
-                crate::EGameState::PlayerTurn => {}
+                crate::EGameState::PlayerTurn => {
+                    allowed = true;
+                }
                 crate::EGameState::NpcTurn => {
                     let diff: f64 = current_time - game.last_turn_time;
                     if diff > 2.0 {
@@ -103,11 +102,6 @@ impl eframe::App for TemplateApp {
                         game.play(toasts, current_time);
                         ui.close_menu();
                     }
-
-                    // if ui.button("Play Game").clicked() {
-                    //     game.play(toasts, current_time);
-                    //     ui.close_menu();
-                    // }
 
                     ui.separator();
 
@@ -181,38 +175,42 @@ impl eframe::App for TemplateApp {
                         let img_size = TEXTURE_SIZE * texture.size_vec2() / texture.size_vec2().y;
 
                         let w = egui::ImageButton::new(texture.texture_id(ctx), img_size);
-                        let r = ui.add(w);
+                        let r = if !allowed {
+                            ui.add_enabled(false, w)
+                        } else {
+                            ui.add(w)
+                        };
 
-                        if let Some(state) = &game.state {
-                            if state == &EGameState::PlayerTurn {
-                                if r.clicked() {
-                                    let index = &game
-                                        .player_hand
-                                        .iter()
-                                        .position(|p| p.to_string() == c)
-                                        .unwrap();
-                                    let card = game.player_hand.swap_remove(*index);
+                        if r.clicked() {
+                            let index = &game
+                                .player_hand
+                                .iter()
+                                .position(|p| p.to_string() == c)
+                                .unwrap();
+                            let card = game.player_hand.swap_remove(*index);
 
-                                    game.play_card(card, EPlayer::PC, current_time);
-                                }
-                            }
+                            game.play_card(card, EPlayer::PC, current_time);
                         }
 
                         r.on_hover_ui(|ui| {
                             ui.label(c);
                         });
-                    } else if ui.button(c.to_string()).clicked() {
-                        if let Some(state) = &game.state {
-                            if state == &EGameState::PlayerTurn {
-                                let index = &game
-                                    .player_hand
-                                    .iter()
-                                    .position(|p| p.to_string() == c)
-                                    .unwrap();
-                                let card = game.player_hand.swap_remove(*index);
+                    } else {
+                        let w = egui::Button::new(c.to_string());
+                        let r = if !allowed {
+                            ui.add_enabled(false, w)
+                        } else {
+                            ui.add(w)
+                        };
+                        if r.clicked() {
+                            let index = &game
+                                .player_hand
+                                .iter()
+                                .position(|p| p.to_string() == c)
+                                .unwrap();
+                            let card = game.player_hand.swap_remove(*index);
 
-                                game.play_card(card, EPlayer::PC, current_time);
-                            }
+                            game.play_card(card, EPlayer::PC, current_time);
                         }
                     }
                 }

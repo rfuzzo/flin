@@ -170,7 +170,9 @@ impl Game {
         self.deal_card(dealer);
 
         // start first turn
-        self.do_turn(toasts, time);
+        if first_player == EPlayer::NPC {
+            self.do_turn(toasts, time);
+        }
     }
 
     /// Deals a card from the talon, or the trump card if the talon is empty
