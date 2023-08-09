@@ -115,7 +115,7 @@ impl eframe::App for TemplateApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // playing field
-
+            
             // trump card
             if let Some(trump) = &game.trump_card {
                 if let Some(texture) = textures.get(&trump.to_string()) {
@@ -169,6 +169,7 @@ impl eframe::App for TemplateApp {
             ui.separator();
 
             // player hand
+            egui::ScrollArea::horizontal().show(ui, |ui| {
             ui.horizontal(|ui| {
                 for c in game.player_hand.clone().iter().map(|c| c.to_string()) {
                     if let Some(texture) = textures.get(&c) {
@@ -214,6 +215,7 @@ impl eframe::App for TemplateApp {
                         }
                     }
                 }
+            });
             });
 
             // points
