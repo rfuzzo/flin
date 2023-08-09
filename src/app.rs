@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use egui_extras::RetainedImage;
 use egui_notify::Toasts;
 
-use crate::{get_deck, Game};
+use crate::{get_deck, EPlayer, Game};
 
 static TEXTURE_SIZE: f32 = 256.0;
 
@@ -15,14 +15,17 @@ pub struct TemplateApp {
 
     //#[serde(skip)]
     textures: HashMap<String, RetainedImage>,
+    //#[serde(skip)]
+    // last_turn_time: f64,
 }
 
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            game: Game::new(false, None, None),
+            game: Game::new(),
             textures: HashMap::default(),
             toasts: Toasts::default(),
+            // last_turn_time: -1.0,
         }
     }
 }
@@ -44,19 +47,6 @@ impl TemplateApp {
 
         Default::default()
     }
-
-    pub fn notify(msg: &str, level: log::Level) {
-        match level {
-            log::Level::Error => {
-                //self.toasts.error(msg);
-                log::error!("{}", msg);
-            }
-            log::Level::Warn => log::warn!("{}", msg),
-            log::Level::Info => log::info!("{}", msg),
-            log::Level::Debug => log::debug!("{}", msg),
-            log::Level::Trace => log::trace!("{}", msg),
-        }
-    }
 }
 
 impl eframe::App for TemplateApp {
@@ -68,12 +58,11 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        use crate::EPlayer;
-
         let Self {
             game,
             textures,
             toasts,
+            // last_turn_time,
         } = self;
 
         // load all textures once
@@ -81,17 +70,41 @@ impl eframe::App for TemplateApp {
             *textures = load_textures(ctx);
         }
 
+        // a turn in the game
+        let current_time = ctx.input(|i| i.time);
+
+        if let Some(state) = &game.state.clone() {
+            match state {
+                crate::EGameState::None => {}
+                crate::EGameState::PlayerTurn => {}
+                crate::EGameState::NpcTurn => {
+                    let diff: f64 = current_time - game.last_turn_time;
+                    if diff > 2.0 {
+                        game.do_turn(toasts, current_time);
+                        game.last_turn_time = ctx.input(|i| i.time);
+                    }
+                }
+                crate::EGameState::Evaluate => {
+                    let diff: f64 = current_time - game.last_turn_time;
+                    if diff > 1.0 {
+                        game.do_turn(toasts, current_time);
+                        game.last_turn_time = ctx.input(|i| i.time);
+                    }
+                }
+            }
+        }
+
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("New Game").clicked() {
-                        *game = Game::new(false, Some(Self::notify), None);
+                        *game = Game::new();
                         ui.close_menu();
                     }
 
                     if ui.button("Play Game").clicked() {
-                        game.play();
+                        game.play(toasts, current_time);
                         ui.close_menu();
                     }
 
@@ -176,8 +189,7 @@ impl eframe::App for TemplateApp {
                                 .unwrap();
                             let card = game.player_hand.swap_remove(*index);
 
-                            let is_forehand = game.trick.0.is_none();
-                            game.play_card(card, EPlayer::PC, is_forehand);
+                            game.play_card(card, EPlayer::PC, current_time);
                         }
                         r.on_hover_ui(|ui| {
                             ui.label(c);
@@ -190,8 +202,7 @@ impl eframe::App for TemplateApp {
                             .unwrap();
                         let card = game.player_hand.swap_remove(*index);
 
-                        let is_forehand = game.trick.0.is_none();
-                        game.play_card(card, EPlayer::PC, is_forehand);
+                        game.play_card(card, EPlayer::PC, current_time);
                     }
                 }
             });
@@ -213,6 +224,8 @@ impl eframe::App for TemplateApp {
             if let Some(winner) = game.winner {
                 ui.label(format!("The winner is {}", winner));
             }
+
+            toasts.show(ctx);
         });
     }
 }
@@ -223,7 +236,6 @@ fn load_textures(_ctx: &egui::Context) -> HashMap<String, RetainedImage> {
 
     // include textures
     let map2: Vec<&[u8]> = vec![
-        include_bytes!("../assets/leaves.x.jpg"),
         include_bytes!("../assets/hearts.unter.jpg"),
         include_bytes!("../assets/hearts.ober.jpg"),
         include_bytes!("../assets/hearts.king.jpg"),

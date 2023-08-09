@@ -1,11 +1,13 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
+
 pub use app::TemplateApp;
+use egui_notify::Toasts;
 
 use std::fmt::Display;
 
-use log::Level;
+use log::{debug, info, warn};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use serde::{Deserialize, Serialize};
@@ -55,6 +57,14 @@ pub enum ESuit {
     Leaves,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub enum EGameState {
+    None,
+    PlayerTurn,
+    NpcTurn,
+    Evaluate,
+}
+
 impl Display for ESuit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -99,25 +109,16 @@ pub struct Game {
     // meta
     pub forehand: Option<EPlayer>,
     pub winner: Option<EPlayer>,
-    pub is_console: bool,
-    // callbacks
-    pub fn_notify: Option<Notification>,
-    pub fn_sync_prompt: Option<SyncPrompt>,
+    state: Option<EGameState>,
+    last_turn_time: f64,
 }
 
-type Notification = fn(&str, Level);
-type SyncPrompt = fn(Vec<String>) -> String;
-
 impl Game {
-    pub fn new(
-        is_console: bool,
-        fn_notify: Option<Notification>,
-        fn_sync_prompt: Option<SyncPrompt>,
-    ) -> Self {
+    pub fn new() -> Self {
         Self {
             trump_card: None,
             trump_suit: None,
-            talon: get_deck(),
+            talon: get_deck_shuffled(),
             trick: (None, None),
             player_stack: vec![],
             player_hand: vec![],
@@ -125,24 +126,27 @@ impl Game {
             npc_hand: vec![],
             forehand: None,
             winner: None,
-            is_console,
-            fn_notify,
-            fn_sync_prompt,
+            state: None,
+            last_turn_time: -1.0,
         }
     }
 
     /// Starts this [`Game`].
-    pub fn play(&mut self) {
-        self.log("A new game has started.", Level::Debug);
+    pub fn play(&mut self, toasts: &mut Toasts, time: f64) {
+        debug!("A new game has started.");
+        toasts.info("A new game has started.");
 
         // determine who is dealer
         let mut dealer: EPlayer = EPlayer::PC;
+        self.set_state(EGameState::NpcTurn, time);
         if rand::random() {
             // generates a boolean
             dealer = EPlayer::NPC;
+            self.set_state(EGameState::PlayerTurn, time);
         }
         let first_player = get_opponent(dealer);
-        self.log(format!("The dealer is: {}.", dealer).as_str(), Level::Debug);
+        debug!("The dealer is: {}.", dealer);
+        toasts.info(format!("The dealer is: {}.", dealer));
 
         // deal cards
         self.deal_card(first_player);
@@ -156,7 +160,8 @@ impl Game {
         if let Some(c) = &self.trump_card {
             self.trump_suit = Some(c.suit.clone());
 
-            self.log(format!("Trump card is: {}.", c).as_str(), Level::Debug);
+            debug!("Trump card is: {}.", c);
+            //toasts.info(format!("Trump card is: {}.", c));
         }
 
         self.deal_card(first_player);
@@ -165,13 +170,7 @@ impl Game {
         self.deal_card(dealer);
 
         // start first turn
-        self.do_turn(first_player, true);
-    }
-
-    fn log(&mut self, msg: &str, level: Level) {
-        if let Some(notify) = self.fn_notify {
-            notify(msg, level);
-        }
+        self.do_turn(toasts, time);
     }
 
     /// Deals a card from the talon, or the trump card if the talon is empty
@@ -196,24 +195,23 @@ impl Game {
         }
     }
 
-    /// A turn in the game
+    /// A turn in the game. consumes the current game state
     ///
     /// # Panics
     ///
     /// Panics if .
-    fn do_turn(&mut self, player: EPlayer, is_forehand: bool) {
-        match player {
-            EPlayer::PC => {
-                if self.is_console {
-                    let card = self.player_choose_card();
-                    self.play_card(card, player, is_forehand);
+    pub fn do_turn(&mut self, toasts: &mut Toasts, time: f64) {
+        if let Some(state) = self.state.take() {
+            match state {
+                EGameState::None => {}
+                EGameState::PlayerTurn => {}
+                EGameState::NpcTurn => {
+                    let card = self.ai_choose_card();
+                    self.play_card(card, EPlayer::NPC, time);
                 }
+                EGameState::Evaluate => self.evaluate(toasts, time),
             }
-            EPlayer::NPC => {
-                let card = self.ai_choose_card();
-                self.play_card(card, player, is_forehand);
-            }
-        };
+        }
     }
 
     /// Plays a card and evaluates the trick
@@ -221,68 +219,64 @@ impl Game {
     /// # Panics
     ///
     /// Panics if not forehand and no card in trick
-    pub fn play_card(&mut self, card: Card, player: EPlayer, is_forehand: bool) {
-        self.log(
-            format!("{} was played by {}", card, player).as_str(),
-            Level::Debug,
-        );
+    pub fn play_card(&mut self, card: Card, player: EPlayer, time: f64) {
+        let is_forehand = self.trick.0.is_none();
 
         if is_forehand {
+            self.forehand = Some(player);
             self.trick.0 = Some(card);
 
             // end turn and go to other player
-            self.do_turn(get_opponent(player), false);
+            match player {
+                EPlayer::PC => self.set_state(EGameState::NpcTurn, time),
+                EPlayer::NPC => self.set_state(EGameState::PlayerTurn, time),
+            }
         } else {
             self.trick.1 = Some(card);
 
-            let wins = wins(
-                self.trick.1.as_ref().unwrap(),
-                self.trick.0.as_ref().unwrap(),
-                self.trump_suit.clone().unwrap(),
-            );
+            // end turn and go to evaluate
+            self.set_state(EGameState::Evaluate, time);
+        }
+    }
 
-            // evaluate trick
-            if wins {
-                self.log(format!("{} won this trick", player).as_str(), Level::Info);
+    fn evaluate(&mut self, toasts: &mut Toasts, time: f64) {
+        // check if backhand wins
+        let backhand_wins = wins(
+            self.trick.1.as_ref().unwrap(),
+            self.trick.0.as_ref().unwrap(),
+            self.trump_suit.clone().unwrap(),
+        );
 
-                self.give_trick_to(player);
-                // I draw
-                if self.can_draw_card() {
-                    self.deal_card(player);
-                    self.deal_card(get_opponent(player));
-                }
+        let forehand = self.forehand.expect("There should always be a forehand, since this should only be called after a card was played");
+        let winner = if backhand_wins {
+            get_opponent(forehand)
+        } else {
+            forehand
+        };
 
-                if self.end_game() {
-                    return;
-                }
+        info!("{} won this trick", winner);
+        toasts.info(format!("{} won this trick", winner));
 
-                // can play again
-                self.do_turn(player, true);
-            } else {
-                self.log(
-                    format!("{} won this trick", get_opponent(player)).as_str(),
-                    Level::Info,
-                );
+        self.give_trick_to(winner, toasts);
 
-                self.give_trick_to(get_opponent(player));
-                // opponent draws
-                if self.can_draw_card() {
-                    self.deal_card(get_opponent(player));
-                    self.deal_card(player);
-                }
+        if self.can_draw_card() {
+            self.deal_card(winner);
+            self.deal_card(get_opponent(winner));
+        }
 
-                if self.end_game() {
-                    return;
-                }
+        if self.end_game(toasts) {
+            return;
+        }
 
-                // loose and opponents turn
-                self.do_turn(get_opponent(player), true);
-            }
+        // winner can play again
+        match winner {
+            EPlayer::PC => self.set_state(EGameState::PlayerTurn, time),
+            EPlayer::NPC => self.set_state(EGameState::NpcTurn, time),
         }
     }
 
     /// .
-    fn give_trick_to(&mut self, player: EPlayer) {
+    fn give_trick_to(&mut self, player: EPlayer, _toasts: &mut Toasts) {
         if let Some(t1) = self.trick.0.take() {
             if let Some(t2) = self.trick.1.take() {
                 match player {
@@ -296,10 +290,8 @@ impl Game {
                     }
                 }
 
-                self.log(
-                    format!("{} has {} points", player, self.get_points(player)).as_str(),
-                    Level::Debug,
-                );
+                debug!("{} has {} points", player, self.get_points(player));
+                //toasts.info(format!("{} has {} points", player, self.get_points(player)));
             }
         }
     }
@@ -310,9 +302,9 @@ impl Game {
     }
 
     /// .
-    fn must_follow_suit(&self) -> bool {
-        self.trump_card.is_none()
-    }
+    // fn must_follow_suit(&self) -> bool {
+    //     self.trump_card.is_none()
+    // }
 
     /// Let the AI player choose a card
     ///
@@ -324,67 +316,11 @@ impl Game {
         self.npc_hand.pop().unwrap()
     }
 
-    /// let the player choose a card
-    ///
-    /// # Panics
-    ///
-    /// Panics if .
-    fn player_choose_card(&mut self) -> Card {
-        let options = self
-            .player_hand
-            .iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<_>>();
-
-        // info
-        if let Some(trick) = &self.trick.0 {
-            if let Some(trump) = &self.trump_card {
-                self.log(format!("[ {} ] | {}", trump, trick).as_str(), Level::Info);
-            } else if let Some(trump_suit) = &self.trump_suit {
-                self.log(
-                    format!("[ {} ] | {}", trump_suit, trick).as_str(),
-                    Level::Info,
-                );
-            }
-        } else if let Some(trump) = &self.trump_card {
-            self.log(format!("[ {} ] | ", trump).as_str(), Level::Info);
-        } else if let Some(trump_suit) = &self.trump_suit {
-            self.log(format!("[ {} ] | ", trump_suit).as_str(), Level::Info);
-        }
-
-        let result = if let Some(prompt) = self.fn_sync_prompt {
-            prompt(options)
-        } else {
-            panic!("Prompt is needed in console mode.");
-        };
-
-        let index = self
-            .player_hand
-            .iter()
-            .position(|p| p.to_string() == result)
-            .unwrap();
-        let card = self.player_hand.swap_remove(index);
-
-        // check follow suit rules
-        if self.must_follow_suit() {
-            if let Some(trick) = &self.trick.0 {
-                // must follow trick suit (farbzwang)
-                if card.suit != trick.suit && self.player_hand.iter().any(|c| c.suit == trick.suit)
-                {
-                    self.log("You violated the law!", Level::Error);
-                }
-                // must win (stichzwang)
-                // todo
-            }
-        }
-
-        card
-    }
-
     /// Checks if the game should end
-    fn end_game(&mut self) -> bool {
+    fn end_game(&mut self, toasts: &mut Toasts) -> bool {
         if self.player_hand.is_empty() && self.npc_hand.is_empty() {
-            self.log("The game ended.", Level::Info);
+            info!("The game ended.");
+            toasts.info("The game ended.");
 
             // count cards in stacks
             let player_count = self.get_points(EPlayer::PC);
@@ -408,6 +344,11 @@ impl Game {
             EPlayer::NPC => self.npc_stack.iter().map(|c| c.value as usize).sum(),
         }
     }
+
+    pub fn set_state(&mut self, state: EGameState, time: f64) {
+        self.state = Some(state);
+        self.last_turn_time = time;
+    }
 }
 
 fn wins(card: &Card, played_card: &Card, trump: ESuit) -> bool {
@@ -421,10 +362,16 @@ fn wins(card: &Card, played_card: &Card, trump: ESuit) -> bool {
 // helper methods
 
 /// .
-pub fn get_deck() -> Vec<Card> {
+pub fn get_deck_shuffled() -> Vec<Card> {
     let mut rng = thread_rng();
+    let mut r = get_deck();
+    r.shuffle(&mut rng);
+    r
+}
 
-    let mut r = vec![
+/// .
+pub fn get_deck() -> Vec<Card> {
+    let r = vec![
         Card::new(ESuit::Hearts, EValue::Unter),
         Card::new(ESuit::Hearts, EValue::Ober),
         Card::new(ESuit::Hearts, EValue::King),
@@ -446,8 +393,6 @@ pub fn get_deck() -> Vec<Card> {
         Card::new(ESuit::Leaves, EValue::X),
         Card::new(ESuit::Leaves, EValue::Ace),
     ];
-
-    r.shuffle(&mut rng);
     r
 }
 
